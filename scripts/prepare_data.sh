@@ -30,21 +30,31 @@ if [ "$missing" -eq 1 ]; then
   exit 1
 fi
 
-echo "Generating MD5SUMS in $DATA_DIR"
+echo "Generating MD5SUMS and DATA_INFO in $DATA_DIR"
 cd "$DATA_DIR"
+rm -f MD5SUMS DATA_INFO
 if command -v md5sum >/dev/null 2>&1; then
   md5sum "${FILES[@]}" > MD5SUMS
-else
-  # macOS fallback
+elif command -v md5 >/dev/null 2>&1; then
   for f in "${FILES[@]}"; do
-    if command -v md5 >/dev/null 2>&1; then
-      md5 -r "$f" >> MD5SUMS
-    else
-      echo "No md5sum or md5 available; skipping checksum generation" >&2
-      break
-    fi
+    md5 -r "$f" >> MD5SUMS
   done
+else
+  echo "No md5sum or md5 available; skipping checksum generation" >&2
 fi
+
+# DATA_INFO: filename, size (human), bytes, mtime
+echo "# filename | size_human | bytes | mtime" > DATA_INFO
+for f in "${FILES[@]}"; do
+  if [ -f "$f" ]; then
+    size_human=$(ls -lh "$f" | awk '{print $5}')
+    bytes=$(stat -c%s "$f" 2>/dev/null || echo "N/A")
+    mtime=$(stat -c%y "$f" 2>/dev/null || ls -l --time-style=full-iso "$f" | awk '{print $6" " $7}')
+    echo "$f | $size_human | $bytes | $mtime" >> DATA_INFO
+  else
+    echo "$f | MISSING" >> DATA_INFO
+  fi
+done
 
 echo "Creating symlinks in repo root"
 cd "$REPO_ROOT"
